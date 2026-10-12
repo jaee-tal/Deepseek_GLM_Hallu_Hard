@@ -1,0 +1,72 @@
+extends: experiment.yaml
+experiment: cross_probe_deepseek_glm_cloud_v1
+default_model: deepseek_v41_flash
+
+models:
+  deepseek_v41_flash:
+    checkpoint: deepseek-ai/DeepSeek-V4.1-Flash
+    revision: 2cba9e42aa026125f3ed06c6d98c1db82f7ca027
+    family: deepseek_v41
+    loader: causal_lm
+    dtype: bfloat16
+    quantized: true
+    quantization: fp8_native
+    device_map: auto
+    attn_implementation: null
+    trust_remote_code: false
+    strict_organic_eligibility: true
+    expected_text_layers: 40
+    expected_hidden_size: 5120
+    minimum_transformers: 5.6.0
+    template_kwargs: {thinking_mode: thinking, reasoning_effort: 1}
+    generation_overrides:
+      short_answer: {max_new_tokens: 512, batch_size: 1}
+      long_form: {max_new_tokens: 768, batch_size: 1}
+  glm_53_flash:
+    checkpoint: zai-org/GLM-5.3-Flash
+    revision: eb9eb208eb0d988989d07a6a12d0fdeb5f52574a
+    family: glm53
+    loader: multimodal_lm
+    processor: true
+    dtype: bfloat16
+    quantized: true
+    quantization: fp8_native
+    device_map: auto
+    attn_implementation: null
+    trust_remote_code: false
+    strict_organic_eligibility: true
+    expected_text_layers: 45
+    expected_hidden_size: 4096
+    minimum_transformers: 5.16.0
+    template_kwargs: {reasoning_effort: low, clear_thinking: true}
+    generation_overrides:
+      short_answer: {max_new_tokens: 512, batch_size: 1}
+      long_form: {max_new_tokens: 768, batch_size: 1}
+
+cloud:
+  experiment_namespace: deepseek_glm_cloud_v1
+  models: [deepseek_v41_flash, glm_53_flash]
+  datasets: [pop_qa, trivia_qa, hallu_hard]
+  probes: [dim, logistic, lda]
+  registers: [lie, misremember, unknown]
+  arms: [plain_inorganic, same_instruction, plain_inorganic_plus_organic, same_instruction_plus_organic]
+  organic_fraction: 0.20
+  organic_mass: 0.50
+  mixed_layer_policy: inherit_source
+  mixed_hyperparameter_policy: inherit_source
+  seeds: [42, 43, 44, 45, 46]
+  replay_chunk_rows: 32
+  checkpoint_interval_seconds: 3600
+  checkpoint_max_age_seconds: 5400
+  heartbeat_seconds: 60
+  stall_seconds: 900
+  artifact_uri: ${CROSS_PROBE_ARTIFACT_URI:-file://cloud_artifacts}
+  wandb:
+    enabled: true
+    project: cross-probe-deepseek-glm
+    entity: ${WANDB_ENTITY:-}
+    mode: ${WANDB_MODE:-online}
+  monitoring:
+    gcp_project: ${GOOGLE_CLOUD_PROJECT:-}
+    metric_prefix: custom.googleapis.com/cross_probe
+    email: ${CROSS_PROBE_ALERT_EMAIL:-}

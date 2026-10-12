@@ -1,0 +1,124 @@
+experiment: cross_probe_deepseek_glm
+
+paths:
+  hf_home: data/hf_hub_cache
+  runs_dir: runs
+  data_dir: data
+
+default_model: deepseek_v41_flash
+models: {}
+
+default_dataset: pop_qa
+datasets:
+  pop_qa:
+    loader: popqa
+    source: {name: akariasai/PopQA, split: test}
+    id_prefix: pop
+    sampled_questions: 9000
+    sampling: {mode: stratified, stratify_by: s_pop, bins: 10, seed: 42}
+    prompt_style: short_answer
+    judge_mode: alias_short
+    has_popularity: true
+    generation_overrides: {max_new_tokens: 32, batch_size: 64}
+  trivia_qa:
+    loader: trivia_qa
+    source: {name: mandarjoshi/trivia_qa, config: rc.nocontext, split: validation}
+    id_prefix: tqa
+    sampled_questions: 5000
+    sampling: {mode: random, seed: 42}
+    prompt_style: short_answer
+    judge_mode: alias_short
+    has_popularity: false
+    generation_overrides: {max_new_tokens: 32, batch_size: 64}
+  hallu_hard:
+    loader: hallu_hard
+    source:
+      research_questions: data/hallu_hard/source/research_questions.jsonl
+      medical_guidelines: data/hallu_hard/source/medical_guidelines.jsonl
+      legal_cases: data/hallu_hard/source/legal_cases.jsonl
+      coding: data/hallu_hard/source/coding.jsonl
+    per_domain_questions:
+      research_questions: 250
+      medical_guidelines: 250
+      legal_cases: 100
+      coding: 100
+    id_prefix: hh
+    sampled_questions: null
+    sampling: {mode: all, seed: 42}
+    split_stratify_by: domain
+    prompt_style: long_form
+    judge_mode: reference_longform
+    reference_max_words: 1500
+    has_popularity: false
+    generation_overrides: {max_new_tokens: 300, batch_size: 16, error_rows_target: 2000}
+
+generation:
+  temperature: 0.7
+  top_p: 0.8
+  top_k: 20
+  do_sample: true
+  max_new_tokens: 32
+  organic_samples_per_question: 2
+  truthful_samples_per_question: 2
+  inorganic_samples_per_question: 4
+  error_rows_target: 8000
+  error_framings: [lie, misremember, unknown]
+  heldout_template_on_test: true
+  base_seed: 12345
+  batch_size: 64
+
+judge:
+  provider: OpenRouter
+  model: "~openai/gpt-mini-latest"
+  temperature: 0
+  reasoning_effort: minimal
+  structured_output: true
+  labels: [correct, incorrect, abstain]
+  save_raw_output: true
+  workers: 8
+  audit_fraction: 0.10
+  audit_seed: 42
+  grading_rules_version: v2
+
+split:
+  unit: question_id
+  train: 0.60
+  validation: 0.20
+  test: 0.20
+  seed: 42
+
+representation:
+  source: hidden_states
+  positions: answer_tokens
+  pooling: mean
+  all_layers: true
+
+replay:
+  logit_chunk: 128
+  determinism_rows: 20
+  determinism_warn_abs: 1.0e-2
+  determinism_fail_abs: 1.0e-1
+
+probes: [dim, logistic, lda, ridge]
+probe_params:
+  C_grid: [1.0e-4, 1.0e-3, 1.0e-2, 1.0e-1, 1.0, 10.0]
+  lda_shrinkage_grid: [0.1, 0.3, 0.5, 0.7, 0.9]
+  ridge_alpha_grid: [0.01, 0.1, 1.0, 10.0, 100.0, 1000.0, 10000.0, 100000.0, 1000000.0]
+  lr_max_iter: 5000
+  ridge_solver: lsqr
+  ridge_tol: 1.0e-4
+  dim_standardize: false
+  threshold_rule: balanced_accuracy
+
+primary_metric: AUROC
+secondary_metrics: [AUPRC, balanced_accuracy, F1]
+
+confidence_intervals:
+  method: question_cluster_bootstrap
+  samples: 1000
+  confidence: 0.95
+  seed: 42
+
+gate:
+  min_free_gpu_gb: 18
+  poll_seconds: 60
